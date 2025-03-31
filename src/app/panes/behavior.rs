@@ -1,6 +1,7 @@
 use super::pane::Pane;
-use crate::{localization::titlecase, utils::ContainerExt};
-use egui::{menu::bar, CollapsingHeader, CursorIcon, RichText, Ui, WidgetText};
+use crate::utils::ContainerExt;
+use egui::{CollapsingHeader, CursorIcon, RichText, Ui, WidgetText, menu::bar};
+use egui_l20n::UiExt;
 use egui_phosphor::regular::{LINK, X};
 use egui_tiles::{Tile, TileId, Tiles, Tree, UiResponse};
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ impl Behavior {
     pub(crate) fn settings(&mut self, ui: &mut Ui, tree: &mut Tree<Pane>) {
         bar(ui, |ui| {
             ui.toggle_value(&mut self.settings.link, RichText::new(LINK).size(SIZE))
-                .on_hover_text(titlecase!("link_panes_settings"));
+                .on_hover_text(ui.localize("link_panes_settings"));
         });
         ui.separator();
         for tile_id in tree.active_tiles() {

@@ -1,15 +1,14 @@
 use super::{plot::Pane as PlotPane, settings::Settings, table::Pane as TablePane};
-use crate::{
-    app::{
-        MQTT_TOPIC_DDOC_C1, MQTT_TOPIC_DDOC_C2, MQTT_TOPIC_DDOC_T1, MQTT_TOPIC_DDOC_T2,
-        MQTT_TOPIC_DDOC_V1, MQTT_TOPIC_DDOC_V2, MQTT_TOPIC_TEMPERATURE, MQTT_TOPIC_TURBIDITY,
-        NAME_DDOC_C1, NAME_DDOC_C2, NAME_DDOC_T1, NAME_DDOC_T2, NAME_DDOC_V1, NAME_DDOC_V2,
-        NAME_TEMPERATURE, NAME_TURBIDITY,
-    },
-    localization::titlecase,
+use crate::app::{
+    MQTT_TOPIC_ATUC, MQTT_TOPIC_DDOC_C1, MQTT_TOPIC_DDOC_C2, MQTT_TOPIC_DDOC_T1,
+    MQTT_TOPIC_DDOC_T2, MQTT_TOPIC_DDOC_V1, MQTT_TOPIC_DDOC_V2, MQTT_TOPIC_DTEC, NAME_DDOC_C1,
+    NAME_DDOC_C2, NAME_DDOC_T1, NAME_DDOC_T2, NAME_DDOC_V1, NAME_DDOC_V2, NAME_TEMPERATURE,
+    NAME_TURBIDITY,
 };
+use crate::localization::ContextExt as _;
 use anyhow::Result;
-use egui::{menu::bar, Id, Ui};
+use egui::{Id, Ui, menu::bar};
+use egui_l20n::{ResponseExt, UiExt as _};
 use egui_phosphor::regular::{CHART_LINE, CLOCK, CLOUD, TABLE};
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -27,8 +26,8 @@ pub(crate) struct Pane {
 }
 
 impl Pane {
-    pub(crate) const TEMPERATURE: Self = Self::new(Kind::Temperature);
-    pub(crate) const TURBIDITY: Self = Self::new(Kind::Turbidity);
+    pub(crate) const ATEC: Self = Self::new(Kind::Dtec);
+    pub(crate) const DTUC: Self = Self::new(Kind::Atuc);
     pub(crate) const DDOC_C1: Self = Self::new(Kind::Ddoc(Ddoc::C1));
     pub(crate) const DDOC_C2: Self = Self::new(Kind::Ddoc(Ddoc::C2));
     pub(crate) const DDOC_T1: Self = Self::new(Kind::Ddoc(Ddoc::T1));
@@ -48,17 +47,13 @@ impl Pane {
     }
 
     pub(crate) const fn icon(&self) -> &str {
-        if self.is_real_time() {
-            CLOCK
-        } else {
-            CLOUD
-        }
+        if self.is_real_time() { CLOCK } else { CLOUD }
     }
 
     pub(crate) const fn name(&self) -> &str {
         match self.kind {
-            Kind::Temperature => NAME_TEMPERATURE,
-            Kind::Turbidity => NAME_TURBIDITY,
+            Kind::Dtec => NAME_TEMPERATURE,
+            Kind::Atuc => NAME_TURBIDITY,
             Kind::Ddoc(Ddoc::C1) => NAME_DDOC_C1,
             Kind::Ddoc(Ddoc::C2) => NAME_DDOC_C2,
             Kind::Ddoc(Ddoc::T1) => NAME_DDOC_T1,
@@ -98,37 +93,45 @@ impl Pane {
         self.data_frame.is_none()
     }
 
-    pub(crate) fn text(&self) -> String {
+    pub(crate) fn text(&self) -> &'static str {
         match self.kind {
-            Kind::Temperature => titlecase!("temperature"),
-            Kind::Turbidity => titlecase!("turbidity"),
-            Kind::Ddoc(Ddoc::C1) => titlecase!("ddoc_c1"),
-            Kind::Ddoc(Ddoc::C2) => titlecase!("ddoc_c2"),
-            Kind::Ddoc(Ddoc::T1) => titlecase!("temperature_channel?index=1"),
-            Kind::Ddoc(Ddoc::T2) => titlecase!("temperature_channel?index=2"),
-            Kind::Ddoc(Ddoc::V1) => titlecase!("ddoc_v1"),
-            Kind::Ddoc(Ddoc::V2) => titlecase!("ddoc_v2"),
+            Kind::Atuc => "analog_turbidity_controller.abbreviation",
+            Kind::Dtec => "digital_temperature_controller.abbreviation",
+            Kind::Ddoc(Ddoc::C1) => {
+                "digital_disolved_oxygen_controller_concentration_channel?index=1"
+            }
+            Kind::Ddoc(Ddoc::C2) => {
+                "digital_disolved_oxygen_controller_concentration_channel?index=2"
+            }
+            Kind::Ddoc(Ddoc::T1) => {
+                "digital_disolved_oxygen_controller_temperature_channel?index=1"
+            }
+            Kind::Ddoc(Ddoc::T2) => {
+                "digital_disolved_oxygen_controller_temperature_channel?index=2"
+            }
+            Kind::Ddoc(Ddoc::V1) => "digital_disolved_oxygen_controller_voltage_channel?index=1",
+            Kind::Ddoc(Ddoc::V2) => "digital_disolved_oxygen_controller_voltage_channel?index=2",
         }
     }
 
-    pub(crate) fn hover_text(&self) -> String {
+    pub(crate) fn hover_text(&self) -> &'static str {
         match self.kind {
-            Kind::Temperature => titlecase!("temperature"),
-            Kind::Turbidity => titlecase!("turbidity"),
-            Kind::Ddoc(Ddoc::C1) => titlecase!("ddoc_c1"),
-            Kind::Ddoc(Ddoc::C2) => titlecase!("ddoc_c2"),
+            Kind::Atuc => "analog_turbidity_controller.hover",
+            Kind::Dtec => "digital_temperature_controller.hover",
+            Kind::Ddoc(Ddoc::C1) => {
+                "digital_disolved_oxygen_controller_concentration_channel?index=1"
+            }
+            Kind::Ddoc(Ddoc::C2) => {
+                "digital_disolved_oxygen_controller_concentration_channel?index=2"
+            }
             Kind::Ddoc(Ddoc::T1) => {
-                titlecase!("digital_disolved_oxygen_controller.temperature_channel?index=1")
+                "digital_disolved_oxygen_controller_temperature_channel?index=1"
             }
             Kind::Ddoc(Ddoc::T2) => {
-                titlecase!("digital_disolved_oxygen_controller.temperature_channel?index=2")
+                "digital_disolved_oxygen_controller_temperature_channel?index=2"
             }
-            Kind::Ddoc(Ddoc::V1) => {
-                titlecase!("digital_disolved_oxygen_controller.concentration_channel?index=1")
-            }
-            Kind::Ddoc(Ddoc::V2) => {
-                titlecase!("digital_disolved_oxygen_controller.concentration_channel?index=2")
-            }
+            Kind::Ddoc(Ddoc::V1) => "digital_disolved_oxygen_controller_voltage_channel?index=1",
+            Kind::Ddoc(Ddoc::V2) => "digital_disolved_oxygen_controller_voltage_channel?index=2",
         }
     }
 }
@@ -161,7 +164,7 @@ impl Pane {
         bar(ui, |ui| {
             ui.selectable_value(&mut self.view, View::Plot, View::Plot.icon());
             ui.selectable_value(&mut self.view, View::Table, View::Table.icon())
-                .on_hover_text(titlecase!("pane_view"));
+                .on_hover_localized("pane_view");
         });
         self.settings.ui(ui)
     }
@@ -170,8 +173,8 @@ impl Pane {
 /// Kind
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) enum Kind {
-    Temperature,
-    Turbidity,
+    Dtec,
+    Atuc,
     Ddoc(Ddoc),
 }
 
@@ -189,8 +192,8 @@ pub(crate) enum Ddoc {
 impl Kind {
     pub(crate) const fn topic(&self) -> &str {
         match self {
-            Kind::Temperature => MQTT_TOPIC_TEMPERATURE,
-            Kind::Turbidity => MQTT_TOPIC_TURBIDITY,
+            Kind::Dtec => MQTT_TOPIC_DTEC,
+            Kind::Atuc => MQTT_TOPIC_ATUC,
             Kind::Ddoc(Ddoc::C1) => MQTT_TOPIC_DDOC_C1,
             Kind::Ddoc(Ddoc::C2) => MQTT_TOPIC_DDOC_C2,
             Kind::Ddoc(Ddoc::T1) => MQTT_TOPIC_DDOC_T1,

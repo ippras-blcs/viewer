@@ -1,13 +1,13 @@
 use super::settings::Settings;
 use crate::app::computers::{PlotComputed, PlotKey};
-use egui::{emath::round_to_decimals, Id, Response, Ui, Widget};
+use egui::{Id, Response, Ui, Widget, emath::round_to_decimals};
 use egui_plot::{GridInput, GridMark, Legend, Line, Plot, PlotPoints, Points};
 use polars::prelude::*;
 use std::{
     iter::{self},
     ops::Range,
 };
-use time::{format_description::FormatItem, macros::format_description, OffsetDateTime, UtcOffset};
+use time::{OffsetDateTime, UtcOffset, format_description::FormatItem, macros::format_description};
 
 const SECOND: f64 = 1_f64;
 const MINUTE: f64 = 60_f64 * SECOND;
@@ -55,8 +55,8 @@ impl Widget for Pane<'_> {
         .x_grid_spacer(|grid_input| time_grid_spacer(grid_input, self.settings.time.offset))
         // .y_axis_label(unit.abbreviation())
         // .y_axis_formatter(move |y, _| round_to_decimals(y.value, 2).to_string())
-        .link_axis(Id::new("plot"), self.settings.link.x, self.settings.link.y)
-        .link_cursor(Id::new("plot"), self.settings.link.x, self.settings.link.y)
+        .link_axis(Id::new("plot"), self.settings.link)
+        .link_cursor(Id::new("plot"), self.settings.link)
         .show(ui, |ui| {
             let computed = ui.ctx().memory_mut(|memory| {
                 memory.caches.cache::<PlotComputed>().get(PlotKey {

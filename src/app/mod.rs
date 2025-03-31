@@ -3,26 +3,27 @@ use self::panes::{
     pane::{Ddoc, Pane},
 };
 use crate::{
-    localization::{self, titlecase, Locale, Localization, LOCALIZATION},
+    localization::ContextExt as _,
     utils::{TilesExt, TreeExt},
 };
 use anyhow::{Error, Result};
+use chrono::{DateTime, Local};
 use cloud::GoogleDrive;
-use eframe::{get_value, set_value, CreationContext, Storage, APP_KEY};
+use eframe::{APP_KEY, CreationContext, Storage, get_value, set_value};
 use egui::{
-    menu::bar, warn_if_debug_build, Align, Align2, CentralPanel, Color32, ComboBox, DroppedFile,
-    FontDefinitions, Id, LayerId, Layout, Order, RichText, ScrollArea, SidePanel, Spinner,
-    TextStyle, TopBottomPanel, Ui,
+    Align, Align2, CentralPanel, Color32, ComboBox, DroppedFile, FontDefinitions, Id, LayerId,
+    Layout, Order, RichText, ScrollArea, SidePanel, Spinner, TextStyle, TopBottomPanel, Ui,
+    menu::bar, warn_if_debug_build,
 };
 use egui_ext::{DroppedFileExt, HoveredFileExt, LightDarkButton};
+use egui_l20n::{ResponseExt as _, UiExt};
 use egui_phosphor::{
-    add_to_fonts,
+    Variant, add_to_fonts,
     regular::{
-        ARROWS_CLOCKWISE, ARROW_FAT_LEFT, ARROW_FAT_RIGHT, CLOCK, CLOUD_ARROW_DOWN, GRID_FOUR,
+        ARROW_FAT_LEFT, ARROW_FAT_RIGHT, ARROWS_CLOCKWISE, CLOCK, CLOUD_ARROW_DOWN, GRID_FOUR,
         ROCKET, SIDEBAR, SIDEBAR_SIMPLE, SQUARE_SPLIT_HORIZONTAL, SQUARE_SPLIT_VERTICAL, TABS,
         TRANSLATE, TRASH,
     },
-    Variant,
 };
 use egui_tiles::{ContainerKind, Tile, Tree};
 use panes::pane::Kind;
@@ -33,26 +34,25 @@ use std::{
     fmt::Write,
     future::Future,
     str,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{Receiver, Sender, channel},
     time::Duration,
 };
 use timed::Timed;
-// use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tracing::{error, info, trace};
 
-const MQTT_ID: &str = "ippras.ru/blc/viewer";
+const MQTT_ID: &str = "ippras.ru/blca/viewer";
 const MQTT_HOST: &str = "broker.emqx.io";
 const MQTT_PORT: u16 = 1883;
 
-const MQTT_TOPIC: &str = "ippras.ru/blc/#";
-const MQTT_TOPIC_DDOC_C1: &str = "ippras.ru/blc/ddoc/c1"; // mA
-const MQTT_TOPIC_DDOC_C2: &str = "ippras.ru/blc/ddoc/c2"; // mA
-const MQTT_TOPIC_DDOC_T1: &str = "ippras.ru/blc/ddoc/t1"; // °C
-const MQTT_TOPIC_DDOC_T2: &str = "ippras.ru/blc/ddoc/t2"; // °C
-const MQTT_TOPIC_DDOC_V1: &str = "ippras.ru/blc/ddoc/v1"; // mg/L
-const MQTT_TOPIC_DDOC_V2: &str = "ippras.ru/blc/ddoc/v2"; // %
-const MQTT_TOPIC_TEMPERATURE: &str = "ippras.ru/blc/temperature";
-const MQTT_TOPIC_TURBIDITY: &str = "ippras.ru/blc/turbidity";
+const MQTT_TOPIC: &str = "ippras.ru/blca/#";
+const MQTT_TOPIC_DDOC_C1: &str = "ippras.ru/blca/ddoc/c1"; // mA
+const MQTT_TOPIC_DDOC_C2: &str = "ippras.ru/blca/ddoc/c2"; // mA
+const MQTT_TOPIC_DDOC_T1: &str = "ippras.ru/blca/ddoc/t1"; // °C
+const MQTT_TOPIC_DDOC_T2: &str = "ippras.ru/blca/ddoc/t2"; // °C
+const MQTT_TOPIC_DDOC_V1: &str = "ippras.ru/blca/ddoc/v1"; // mg/L
+const MQTT_TOPIC_DDOC_V2: &str = "ippras.ru/blca/ddoc/v2"; // %
+const MQTT_TOPIC_DTEC: &str = "ippras.ru/blca/temperature";
+const MQTT_TOPIC_ATUC: &str = "ippras.ru/blca/turbidity";
 
 const NAME_DDOC_C1: &str = "DDOC.C1";
 const NAME_DDOC_C2: &str = "DDOC.C2";
@@ -116,7 +116,7 @@ impl App {
         let mut fonts = FontDefinitions::default();
         add_to_fonts(&mut fonts, Variant::Regular);
         cc.egui_ctx.set_fonts(fonts);
-
+        cc.egui_ctx.set_localizations();
         spawn_mqtt(&cc.egui_ctx);
 
         // return Default::default();
@@ -160,8 +160,8 @@ impl App {
                     Ok(data_frame) if data_frame.width() > 1 => {
                         trace!(?data_frame);
                         let kind = match data_frame[1].name().as_str() {
-                            NAME_TEMPERATURE => Kind::Temperature,
-                            NAME_TURBIDITY => Kind::Turbidity,
+                            NAME_TEMPERATURE => Kind::Dtec,
+                            NAME_TURBIDITY => Kind::Atuc,
                             NAME_DDOC_C1 => Kind::Ddoc(Ddoc::C1),
                             NAME_DDOC_C2 => Kind::Ddoc(Ddoc::C2),
                             NAME_DDOC_T1 => Kind::Ddoc(Ddoc::T1),
@@ -194,8 +194,8 @@ impl App {
     fn data(&mut self) {
         while let Ok(data_frame) = self.data_receiver.try_recv() {
             let kind = match data_frame[1].name().as_str() {
-                NAME_TEMPERATURE => Kind::Temperature,
-                NAME_TURBIDITY => Kind::Turbidity,
+                NAME_TEMPERATURE => Kind::Dtec,
+                NAME_TURBIDITY => Kind::Atuc,
                 NAME_DDOC_C1 => Kind::Ddoc(Ddoc::C1),
                 NAME_DDOC_C2 => Kind::Ddoc(Ddoc::C2),
                 NAME_DDOC_T1 => Kind::Ddoc(Ddoc::T1),
@@ -274,18 +274,18 @@ impl App {
             bar(ui, |ui| {
                 // Left panel
                 ui.toggle_value(&mut self.left_panel, icon!(SIDEBAR_SIMPLE))
-                    .on_hover_text(titlecase!("left_panel"));
+                    .on_hover_text(ui.localize("left_panel"));
                 ui.separator();
                 ui.light_dark_button(SIZE);
                 ui.separator();
                 ui.toggle_value(&mut self.reactive, icon!(ROCKET))
                     .on_hover_text("reactive")
-                    .on_hover_text(titlecase!("reactive_description_enabled"))
-                    .on_disabled_hover_text(titlecase!("reactive_description_disabled"));
+                    .on_hover_text(ui.localize("reactive_description_enabled"))
+                    .on_disabled_hover_text(ui.localize("reactive_description_disabled"));
                 ui.separator();
                 if ui
                     .button(icon!(TRASH))
-                    .on_hover_text(titlecase!("reset_application"))
+                    .on_hover_text(ui.localize("reset_application"))
                     .clicked()
                 {
                     *self = Default::default();
@@ -293,7 +293,7 @@ impl App {
                 ui.separator();
                 if ui
                     .button(icon!(ARROWS_CLOCKWISE))
-                    .on_hover_text(titlecase!("reset_gui"))
+                    .on_hover_text(ui.localize("reset_gui"))
                     .clicked()
                 {
                     ui.memory_mut(|memory| *memory = Default::default());
@@ -301,7 +301,7 @@ impl App {
                 ui.separator();
                 if ui
                     .button(icon!(SQUARE_SPLIT_VERTICAL))
-                    .on_hover_text(titlecase!("vertical"))
+                    .on_hover_text(ui.localize("vertical"))
                     .clicked()
                 {
                     if let Some(id) = self.tree.root {
@@ -312,7 +312,7 @@ impl App {
                 }
                 if ui
                     .button(icon!(SQUARE_SPLIT_HORIZONTAL))
-                    .on_hover_text(titlecase!("horizontal"))
+                    .on_hover_text(ui.localize("horizontal"))
                     .clicked()
                 {
                     if let Some(id) = self.tree.root {
@@ -323,7 +323,7 @@ impl App {
                 }
                 if ui
                     .button(icon!(GRID_FOUR))
-                    .on_hover_text(titlecase!("grid"))
+                    .on_hover_text(ui.localize("grid"))
                     .clicked()
                 {
                     if let Some(id) = self.tree.root {
@@ -334,7 +334,7 @@ impl App {
                 }
                 if ui
                     .button(icon!(TABS))
-                    .on_hover_text(titlecase!("tabs"))
+                    .on_hover_text(ui.localize("tabs"))
                     .clicked()
                 {
                     if let Some(id) = self.tree.root {
@@ -351,8 +351,8 @@ impl App {
                             && candidate.is_real_time() == pane.is_real_time()
                     });
                     if ui
-                        .selectable_label(tile_id.is_some(), pane.text())
-                        .on_hover_text(pane.hover_text())
+                        .selectable_label(tile_id.is_some(), ui.localize(pane.text()))
+                        .on_hover_text(ui.localize(pane.hover_text()))
                         .clicked()
                     {
                         if let Some(id) = tile_id {
@@ -364,45 +364,35 @@ impl App {
                 };
                 ui.menu_button(icon!(CLOCK), |ui| {
                     // Temperature
-                    toggle(ui, Pane::TEMPERATURE);
-                    toggle(ui, Pane::TURBIDITY);
+                    toggle(ui, Pane::ATEC);
+                    toggle(ui, Pane::DTUC);
                     // DDOC
-                    ui.menu_button(titlecase!("ddoc"), |ui| {
-                        toggle(ui, Pane::DDOC_V1);
-                        toggle(ui, Pane::DDOC_V2);
-                        toggle(ui, Pane::DDOC_T1);
-                        toggle(ui, Pane::DDOC_T2);
-                        toggle(ui, Pane::DDOC_C1);
-                        toggle(ui, Pane::DDOC_C2);
-                    })
+                    ui.menu_button(
+                        ui.localize("digital_disolved_oxygen_controller.abbreviation"),
+                        |ui| {
+                            toggle(ui, Pane::DDOC_V1);
+                            toggle(ui, Pane::DDOC_V2);
+                            toggle(ui, Pane::DDOC_T1);
+                            toggle(ui, Pane::DDOC_T2);
+                            toggle(ui, Pane::DDOC_C1);
+                            toggle(ui, Pane::DDOC_C2);
+                        },
+                    )
                     .response
-                    .on_disabled_hover_text("text");
+                    .on_disabled_hover_localized("digital_disolved_oxygen_controller.hover");
                 })
                 .response
-                .on_hover_text(titlecase!("in_real_time"));
-                // Open cloud saved
-                ui.menu_button(icon!(CLOUD_ARROW_DOWN), |ui| {
-                    self.google_drive.ui(ui);
-                })
-                .response
-                .on_hover_text(titlecase!("cloud_saved"));
+                .on_hover_text(ui.localize("in_real_time"));
+                // // Open cloud saved
+                // ui.menu_button(icon!(CLOUD_ARROW_DOWN), |ui| {
+                //     self.google_drive.ui(ui);
+                // })
+                // .response
+                // .on_hover_text(ui.localize("cloud_saved"));
 
                 ui.separator();
                 // Locale
-                ui.menu_button(icon!(TRANSLATE), |ui| {
-                    let mut locale = LOCALIZATION.read().unwrap().locale();
-                    let mut changed = ui
-                        .selectable_value(&mut locale, Locale::En, Locale::En.text())
-                        .changed();
-                    changed |= ui
-                        .selectable_value(&mut locale, Locale::Ru, Locale::Ru.text())
-                        .changed();
-                    if changed {
-                        *LOCALIZATION.write().unwrap() = Localization::new(locale);
-                    }
-                })
-                .response
-                .on_hover_text(titlecase!("language"));
+                ui.locale_button();
             });
         });
     }
@@ -477,36 +467,50 @@ fn spawn_mqtt(ctx: &egui::Context) {
             client.subscribe(MQTT_TOPIC, QoS::ExactlyOnce)?;
             for event in connection.iter() {
                 if let Event::Incoming(Incoming::Publish(publish)) = event? {
-                    let Timed { time, value }: Timed<f64> = de::from_bytes(&publish.payload)?;
-                    trace!(?time);
-                    let timestamp = (time.unix_timestamp_nanos() / MICROSECONDS) as i64;
-                    let time = AnyValue::Datetime(timestamp, TimeUnit::Milliseconds, &None);
+                    // trace!(?time);
+                    // let timestamp = (time.unix_timestamp_nanos() / MICROSECONDS) as i64;
+                    // let time = AnyValue::Datetime(timestamp, TimeUnit::Milliseconds, None);
                     let name = match &*publish.topic {
-                        MQTT_TOPIC_TEMPERATURE => NAME_TEMPERATURE,
-                        MQTT_TOPIC_TURBIDITY => NAME_TURBIDITY,
-                        MQTT_TOPIC_DDOC_C1 => NAME_DDOC_C1,
-                        MQTT_TOPIC_DDOC_C2 => NAME_DDOC_C2,
-                        MQTT_TOPIC_DDOC_T1 => NAME_DDOC_T1,
-                        MQTT_TOPIC_DDOC_T2 => NAME_DDOC_T2,
-                        MQTT_TOPIC_DDOC_V1 => NAME_DDOC_V1,
-                        MQTT_TOPIC_DDOC_V2 => NAME_DDOC_V2,
+                        MQTT_TOPIC_DTEC => {
+                            let TemperatureMessage {
+                                identifiers,
+                                values,
+                                date_time,
+                            } = de::from_bytes::<TemperatureMessage>(&publish.payload)?;
+                            let row = &df! {
+                                "Identifiers" => identifiers,
+                                "Temperature" => values,
+                                // "Timestamp" => vec![date_time],
+                            }?;
+                            println!("row: {row:?}");
+                        }
+                        MQTT_TOPIC_ATUC => {
+                            let message = de::from_bytes::<TurbidityMessage>(&publish.payload)?;
+                            println!("TurbidityMessage: {message:?}");
+                        }
+                        // MQTT_TOPIC_DDOC_C1 => NAME_DDOC_C1,
+                        // MQTT_TOPIC_DDOC_C2 => NAME_DDOC_C2,
+                        // MQTT_TOPIC_DDOC_T1 => NAME_DDOC_T1,
+                        // MQTT_TOPIC_DDOC_T2 => NAME_DDOC_T2,
+                        // MQTT_TOPIC_DDOC_V1 => NAME_DDOC_V1,
+                        // MQTT_TOPIC_DDOC_V2 => NAME_DDOC_V2,
                         topic => {
                             error!("Unexpected MQTT topic {topic}");
                             continue;
                         }
                     };
-                    let row = &df! {
-                        "Time" => vec![time],
-                        name => vec![value],
-                    }?;
-                    let id = Id::new(&*publish.topic);
-                    let mut data_frame = context
-                        .memory(|memory| memory.data.get_temp::<DataFrame>(id))
-                        .unwrap_or_default();
-                    data_frame = data_frame.vstack(&row)?;
-                    context.memory_mut(|memory| {
-                        memory.data.insert_temp(id, data_frame);
-                    });
+                    // let row = &df! {
+                    //     "Time" => vec![time],
+                    //     name => vec![value],
+                    // }?;
+                    // let id = Id::new(&*publish.topic);
+                    // let mut data_frame = context
+                    //     .memory(|memory| memory.data.get_temp::<DataFrame>(id))
+                    //     .unwrap_or_default();
+                    // data_frame = data_frame.vstack(&row)?;
+                    // context.memory_mut(|memory| {
+                    //     memory.data.insert_temp(id, data_frame);
+                    // });
                 }
             }
             Ok(())
@@ -518,6 +522,20 @@ fn spawn_mqtt(ctx: &egui::Context) {
 
 fn deserialize(dropped_file: &DroppedFile) -> Result<DataFrame> {
     Ok(de::from_bytes(&dropped_file.bytes()?)?)
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub(crate) struct TemperatureMessage {
+    pub(crate) identifiers: Vec<u64>,
+    pub(crate) values: Vec<f32>,
+    pub(crate) date_time: DateTime<Local>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+pub(crate) struct TurbidityMessage {
+    pub(crate) identifier: u64,
+    pub(crate) value: u16,
+    pub(crate) date_time: DateTime<Local>,
 }
 
 mod cloud;

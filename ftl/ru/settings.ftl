@@ -1,0 +1,20 @@
+analog_turbidity_controller = Цифровой контроллер прозрачности
+    .abbreviation = АКП
+    .hover = Цифровой контроллер прозрачности
+digital_disolved_oxygen_controller = Цифровой контроллер растворенного кислорода
+    .abbreviation = ЦКРК
+    .hover = Цифровой контроллер растворенного кислорода
+digital_disolved_oxygen_controller_concentration_channel = Канал концентрации { $index }
+    .abbreviation = К{ $index }
+    .hover = Цифровой контроллер растворенного кислорода, канал концентрации { $index }
+digital_disolved_oxygen_controller_temperature_channel = Канал температуры { $index }
+    .abbreviation = Т{ $index }
+    .hover = Цифровой контроллер растворенного кислорода, канал напряжения { $index }
+digital_disolved_oxygen_controller_voltage_channel = Канал напряжения { $index }
+    .abbreviation = V{ $index }
+    .hover = Цифровой контроллер растворенного кислорода, канал напряжения { $index }
+digital_temperature_controller = Цифровой контроллер температуры
+    .abbreviation = ЦКТ
+    .hover = Цифровой контроллер температуры
+
+in_real_time = В реальном времени

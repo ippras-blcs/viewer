@@ -1,8 +1,8 @@
-use crate::localization::titlecase;
-use egui::{emath::Float, Color32, ComboBox, DragValue, RichText, Ui, Vec2b};
+use egui::{Color32, ComboBox, DragValue, RichText, Ui, Vec2b, emath::Float};
+use egui_l20n::UiExt;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, hash::Hash};
-use time::{macros::offset, UtcOffset};
+use time::{UtcOffset, macros::offset};
 
 /// Settings
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -53,7 +53,7 @@ impl Settings {
 // },
 impl Settings {
     pub(crate) fn ui(&mut self, ui: &mut Ui) {
-        ui.collapsing(RichText::new(titlecase!("plot")).heading(), |ui| {
+        ui.collapsing(RichText::new(ui.localize("plot")).heading(), |ui| {
             // ui.horizontal(|ui| {
             //     ui.label("Temperature unit:");
             //     ComboBox::from_id_source("temperature_unit")
@@ -89,7 +89,7 @@ impl Settings {
             //         .on_hover_text(context.settings.concentration.unit.singular());
             // });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("time_zone"));
+                ui.label(ui.localize("time_zone"));
                 let mut changed = false;
                 ComboBox::from_id_salt("time_zone")
                     .selected_text(self.time.offset.name())
@@ -100,7 +100,7 @@ impl Settings {
                                 UtcOffset::UTC,
                                 UtcOffset::UTC.name(),
                             )
-                            .on_hover_text(titlecase!("time_zone__utc.hover"))
+                            .on_hover_text(ui.localize("time_zone__utc.hover"))
                             .changed();
                         changed |= ui
                             .selectable_value(
@@ -108,7 +108,7 @@ impl Settings {
                                 UtcOffset::LOCAL,
                                 UtcOffset::LOCAL.name(),
                             )
-                            .on_hover_text(titlecase!("time_zone__local.hover"))
+                            .on_hover_text(ui.localize("time_zone__local.hover"))
                             .changed();
                     });
                 // if changed && behavior.settings.link {
@@ -119,10 +119,10 @@ impl Settings {
             });
             ui.separator();
             ui.horizontal(|ui| {
-                ui.label(titlecase!("legend"));
+                ui.label(ui.localize("legend"));
                 if ui
                     .checkbox(&mut self.legend, "")
-                    .on_hover_text(titlecase!("legend.hover"))
+                    .on_hover_text(ui.localize("legend.hover"))
                     .changed()
                 {
                     // self.settings
@@ -131,10 +131,10 @@ impl Settings {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("link_axis"));
+                ui.label(ui.localize("link_axis"));
                 if ui
                     .checkbox(&mut self.link.x, "")
-                    .on_hover_text(titlecase!("link_axis.hover?axis=x"))
+                    .on_hover_text(ui.localize("link_axis.hover?axis=x"))
                     .changed()
                 {
                     // self.settings
@@ -143,7 +143,7 @@ impl Settings {
                 }
                 if ui
                     .checkbox(&mut self.link.y, "")
-                    .on_hover_text(titlecase!("link_axis.hover?axis=y"))
+                    .on_hover_text(ui.localize("link_axis.hover?axis=y"))
                     .changed()
                 {
                     // self.settings
@@ -152,10 +152,10 @@ impl Settings {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("drag"));
+                ui.label(ui.localize("drag"));
                 if ui
                     .checkbox(&mut self.drag.x, "")
-                    .on_hover_text(titlecase!("drag.hover?axis=x"))
+                    .on_hover_text(ui.localize("drag.hover?axis=x"))
                     .changed()
                 {
                     // self.settings
@@ -164,7 +164,7 @@ impl Settings {
                 }
                 if ui
                     .checkbox(&mut self.drag.y, "")
-                    .on_hover_text(titlecase!("drag.hover?axis=y"))
+                    .on_hover_text(ui.localize("drag.hover?axis=y"))
                     .changed()
                 {
                     // self.settings
@@ -173,10 +173,10 @@ impl Settings {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("scroll"));
+                ui.label(ui.localize("scroll"));
                 if ui
                     .checkbox(&mut self.scroll, "")
-                    .on_hover_text(titlecase!("scroll.hover"))
+                    .on_hover_text(ui.localize("scroll.hover"))
                     .changed()
                 {
                     // self.settings
@@ -185,10 +185,10 @@ impl Settings {
                 }
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("zoom"));
+                ui.label(ui.localize("zoom"));
                 if ui
                     .checkbox(&mut self.zoom.x, "")
-                    .on_hover_text(titlecase!("zoom.hover?axis=x"))
+                    .on_hover_text(ui.localize("zoom.hover?axis=x"))
                     .changed()
                 {
                     // self.settings
@@ -197,7 +197,7 @@ impl Settings {
                 }
                 if ui
                     .checkbox(&mut self.zoom.y, "")
-                    .on_hover_text(titlecase!("zoom.hover?axis=y"))
+                    .on_hover_text(ui.localize("zoom.hover?axis=y"))
                     .changed()
                 {
                     // self.settings
@@ -206,16 +206,16 @@ impl Settings {
                 }
             });
         });
-        ui.collapsing(RichText::new(titlecase!("source")).heading(), |ui| {
+        ui.collapsing(RichText::new(ui.localize("source")).heading(), |ui| {
             ui.horizontal(|ui| {
-                ui.label(titlecase!("points"));
+                ui.label(ui.localize("points"));
                 if ui
                     .add(
                         DragValue::new(&mut self.source.points.radius)
                             .range(0.0..=f32::MAX)
                             .speed(0.1),
                     )
-                    .on_hover_text(titlecase!("points__radius.hover"))
+                    .on_hover_text(ui.localize("points__radius.hover"))
                     .changed()
                 {
                     // self.settings
@@ -226,7 +226,7 @@ impl Settings {
                 }
                 if ui
                     .checkbox(&mut self.source.points.filled, "")
-                    .on_hover_text(titlecase!("points__fill.hover"))
+                    .on_hover_text(ui.localize("points__fill.hover"))
                     .changed()
                 {
                     // self.settings
@@ -237,7 +237,7 @@ impl Settings {
                 }
                 if ui
                     .color_edit_button_srgba(&mut self.source.points.color)
-                    .on_hover_text(titlecase!("points__color.hover"))
+                    .on_hover_text(ui.localize("points__color.hover"))
                     .changed()
                 {
                     // self.settings
@@ -248,54 +248,54 @@ impl Settings {
                 }
             });
         });
-        ui.collapsing(RichText::new(titlecase!("resampling")).heading(), |ui| {
+        ui.collapsing(RichText::new(ui.localize("resampling")).heading(), |ui| {
             ui.horizontal(|ui| {
-                ui.label(titlecase!("resampling_mean"));
+                ui.label(ui.localize("resampling_mean"));
                 ui.checkbox(&mut self.resampling.mean, "")
-                    .on_hover_text(titlecase!("resampling_mean.hover"));
+                    .on_hover_text(ui.localize("resampling_mean.hover"));
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("resampling_median"));
+                ui.label(ui.localize("resampling_median"));
                 ui.checkbox(&mut self.resampling.median, "")
-                    .on_hover_text(titlecase!("resampling_median.hover"));
+                    .on_hover_text(ui.localize("resampling_median.hover"));
             });
             if !self.resampling.mean && !self.resampling.median {
                 ui.disable();
             }
             ui.horizontal(|ui| {
-                ui.label(titlecase!("every"));
+                ui.label(ui.localize("every"));
                 ui.add(DragValue::new(&mut self.resampling.every).range(1..=86400))
-                    .on_hover_text(titlecase!("every.hover"));
+                    .on_hover_text(ui.localize("every.hover"));
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("period"));
+                ui.label(ui.localize("period"));
                 ui.add(DragValue::new(&mut self.resampling.period).range(1..=86400))
-                    .on_hover_text(titlecase!("window_duration"));
+                    .on_hover_text(ui.localize("window_duration"));
             });
         });
-        ui.collapsing(RichText::new(titlecase!("rolling")).heading(), |ui| {
+        ui.collapsing(RichText::new(ui.localize("rolling")).heading(), |ui| {
             ui.horizontal(|ui| {
-                ui.label(titlecase!("mean"));
+                ui.label(ui.localize("mean"));
                 ui.checkbox(&mut self.rolling.mean, "")
-                    .on_hover_text(titlecase!("rolling_mean"));
+                    .on_hover_text(ui.localize("rolling_mean"));
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("median"));
+                ui.label(ui.localize("median"));
                 ui.checkbox(&mut self.rolling.median, "")
-                    .on_hover_text(titlecase!("rolling_median"));
+                    .on_hover_text(ui.localize("rolling_median"));
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("window_size"));
+                ui.label(ui.localize("window_size"));
                 ui.add(DragValue::new(&mut self.rolling.window_size).range(1..=usize::MAX))
-                    .on_hover_text(titlecase!("window_size_description"));
+                    .on_hover_text(ui.localize("window_size_description"));
             });
             ui.horizontal(|ui| {
-                ui.label(titlecase!("min_periods"));
+                ui.label(ui.localize("min_periods"));
                 ui.add(
                     DragValue::new(&mut self.rolling.min_periods)
                         .range(1..=self.rolling.window_size),
                 )
-                .on_hover_text(titlecase!("min_periods_description"));
+                .on_hover_text(ui.localize("min_periods_description"));
             });
         });
     }

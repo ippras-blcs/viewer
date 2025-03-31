@@ -1,14 +1,8 @@
-= BLC
+= BLCS
 
-== Links
+Bioreactor logging and control system.
 
-* link:https://www.youtube.com/watch?v=zUvHkkkrmIY[Rust plot a sensor value in real time]
-* link:https://www.youtube.com/watch?v=DfOLDv1RnEg[Rust egui brainflow real time plot]
-
-* link:https://docs.rs/ewebsock/0.6.0/ewebsock/index.html[ewebsock]
-
-* link:[]
-* link:[]
+== Documentation
 
 === Resampling settings
 
@@ -32,3 +26,12 @@
 |---|
         |---|
                 |---|
+
+== Links
+
+* link:https://www.youtube.com/watch?v=zUvHkkkrmIY[Rust plot a sensor value in real time]
+* link:https://www.youtube.com/watch?v=DfOLDv1RnEg[Rust egui brainflow real time plot]
+
+* link:https://docs.rs/ewebsock/0.6.0/ewebsock/index.html[ewebsock]
+
+* link:[]
