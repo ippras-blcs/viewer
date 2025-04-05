@@ -1,16 +1,19 @@
 [package]
 name = "viewer"
 version = "0.1.0"
+authors = ["Kazakov Giorgi Vladimirovich", "Sidorov Roman Alexandrovich"]
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0.97"
+arrow = "54.3.1"
+bytes = "1.10.1"
 chrono = "0.4.40"
 eframe = { version = "0.31.1", default-features = false, features = [
-    "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
-    "default_fonts", # Embed the default egui fonts.
-    "glow",          # Use the glow rendering backend. Alternative: "wgpu".
-    "persistence",   # Enable restoring app state when restarting the app.
+    "accesskit",
+    "default_fonts",
+    "glow",
+    "persistence",
 ] }
 egui = "0.31.1"
 egui-phosphor = "0.9.0"
@@ -20,6 +23,8 @@ egui_l20n = { git = "https://github.com/kgv/egui_l20n", features = ["macros"] }
 egui_plot = "0.31.0"
 egui_tiles = "0.12.0"
 futures = "0.3.31"
+object_store = { version = "0.11.0", features = ["http"] }
+parquet = { version = "54.3.1", features = ["arrow", "async", "object_store"] }
 polars = { version = "0.46.0", default-features = false, features = [
     "dtype-array",      # ?
     "dtype-datetime",
@@ -46,7 +51,7 @@ tracing = "0.1.41"
 unic-langid = { version = "0.9.5", features = ["macros"] }
 
 google_drive = { git = "https://github.com/ippras-blc/google_drive" }
-timed = { git = "https://github.com/ippras-blc/timed", features = ["serde"] }
+# timed = { git = "https://github.com/ippras-blc/timed", features = ["serde"] }
 
 # native
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -58,7 +63,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
 ewebsock = "0.8.0"
-getrandom = { version = "0.3.2", features = [] }
+getrandom = "0.3.2"
 poll-promise = { version = "0.3.0", features = ["web"] }
 tokio_with_wasm = { version = "0.8.2", features = ["rt"] }
 tracing-wasm = "0.2.1"

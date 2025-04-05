@@ -7,7 +7,6 @@ use crate::{
     utils::{TilesExt, TreeExt},
 };
 use anyhow::{Error, Result};
-use chrono::{DateTime, Local};
 use cloud::GoogleDrive;
 use eframe::{APP_KEY, CreationContext, Storage, get_value, set_value};
 use egui::{
@@ -37,22 +36,7 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel},
     time::Duration,
 };
-use timed::Timed;
 use tracing::{error, info, trace};
-
-const MQTT_ID: &str = "ippras.ru/blca/viewer";
-const MQTT_HOST: &str = "broker.emqx.io";
-const MQTT_PORT: u16 = 1883;
-
-const MQTT_TOPIC: &str = "ippras.ru/blca/#";
-const MQTT_TOPIC_DDOC_C1: &str = "ippras.ru/blca/ddoc/c1"; // mA
-const MQTT_TOPIC_DDOC_C2: &str = "ippras.ru/blca/ddoc/c2"; // mA
-const MQTT_TOPIC_DDOC_T1: &str = "ippras.ru/blca/ddoc/t1"; // °C
-const MQTT_TOPIC_DDOC_T2: &str = "ippras.ru/blca/ddoc/t2"; // °C
-const MQTT_TOPIC_DDOC_V1: &str = "ippras.ru/blca/ddoc/v1"; // mg/L
-const MQTT_TOPIC_DDOC_V2: &str = "ippras.ru/blca/ddoc/v2"; // %
-const MQTT_TOPIC_DTEC: &str = "ippras.ru/blca/temperature";
-const MQTT_TOPIC_ATUC: &str = "ippras.ru/blca/turbidity";
 
 const NAME_DDOC_C1: &str = "DDOC.C1";
 const NAME_DDOC_C2: &str = "DDOC.C2";
@@ -117,7 +101,7 @@ impl App {
         add_to_fonts(&mut fonts, Variant::Regular);
         cc.egui_ctx.set_fonts(fonts);
         cc.egui_ctx.set_localizations();
-        spawn_mqtt(&cc.egui_ctx);
+        mqtt::spawn(&cc.egui_ctx);
 
         // return Default::default();
         // Load previous app state (if any).
@@ -364,8 +348,8 @@ impl App {
                 };
                 ui.menu_button(icon!(CLOCK), |ui| {
                     // Temperature
-                    toggle(ui, Pane::ATEC);
-                    toggle(ui, Pane::DTUC);
+                    toggle(ui, Pane::DTEC);
+                    toggle(ui, Pane::ATUC);
                     // DDOC
                     ui.menu_button(
                         ui.localize("digital_disolved_oxygen_controller.abbreviation"),
@@ -417,6 +401,10 @@ impl eframe::App for App {
     }
 }
 
+fn deserialize(dropped_file: &DroppedFile) -> Result<DataFrame> {
+    Ok(de::from_bytes(&dropped_file.bytes()?)?)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn<F: Future<Output = ()> + Send + 'static>(f: F) {
     std::thread::spawn(move || futures::executor::block_on(f));
@@ -427,117 +415,7 @@ fn spawn<F: Future<Output = ()> + 'static>(f: F) {
     wasm_bindgen_futures::spawn_local(f);
 }
 
-#[cfg(target_arch = "wasm32")]
-fn spawn_mqtt(ctx: &egui::Context) {
-    let (mut sender, receiver) = loop {
-        // broker.emqx.io:8084
-        // match ewebsock::connect("wss://broker.emqx.io:8084/mqtt", Default::default()) {
-        match ewebsock::connect("wss://echo.websocket.org", Default::default()) {
-            Ok((sender, receiver)) => break (sender, receiver),
-            Err(error) => error!(%error),
-        }
-    };
-    spawn(async move {
-        // sender.send(ewebsock::WsMessage::Text("Hello!".into()));
-        loop {
-            sender.send(ewebsock::WsMessage::Text("Hello!".into()));
-        }
-    });
-    spawn(async move {
-        // sender.send(ewebsock::WsMessage::Text("Hello!".into()));
-        while let Some(event) = receiver.try_recv() {
-            println!("Received {:?}", event);
-        }
-    });
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn spawn_mqtt(ctx: &egui::Context) {
-    use polars::datatypes::TimeUnit;
-    use ron::de;
-    use rumqttc::{Client, Event, Incoming, MqttOptions, QoS};
-    use timed::MICROSECONDS;
-
-    let mut options = MqttOptions::new(MQTT_ID, MQTT_HOST, MQTT_PORT);
-    options.set_keep_alive(Duration::from_secs(9));
-    let (client, mut connection) = Client::new(options, 9);
-    let context = ctx.clone();
-    spawn(async move {
-        if let Err(error) = (|| -> Result<()> {
-            client.subscribe(MQTT_TOPIC, QoS::ExactlyOnce)?;
-            for event in connection.iter() {
-                if let Event::Incoming(Incoming::Publish(publish)) = event? {
-                    // trace!(?time);
-                    // let timestamp = (time.unix_timestamp_nanos() / MICROSECONDS) as i64;
-                    // let time = AnyValue::Datetime(timestamp, TimeUnit::Milliseconds, None);
-                    let name = match &*publish.topic {
-                        MQTT_TOPIC_DTEC => {
-                            let TemperatureMessage {
-                                identifiers,
-                                values,
-                                date_time,
-                            } = de::from_bytes::<TemperatureMessage>(&publish.payload)?;
-                            let row = &df! {
-                                "Identifiers" => identifiers,
-                                "Temperature" => values,
-                                // "Timestamp" => vec![date_time],
-                            }?;
-                            println!("row: {row:?}");
-                        }
-                        MQTT_TOPIC_ATUC => {
-                            let message = de::from_bytes::<TurbidityMessage>(&publish.payload)?;
-                            println!("TurbidityMessage: {message:?}");
-                        }
-                        // MQTT_TOPIC_DDOC_C1 => NAME_DDOC_C1,
-                        // MQTT_TOPIC_DDOC_C2 => NAME_DDOC_C2,
-                        // MQTT_TOPIC_DDOC_T1 => NAME_DDOC_T1,
-                        // MQTT_TOPIC_DDOC_T2 => NAME_DDOC_T2,
-                        // MQTT_TOPIC_DDOC_V1 => NAME_DDOC_V1,
-                        // MQTT_TOPIC_DDOC_V2 => NAME_DDOC_V2,
-                        topic => {
-                            error!("Unexpected MQTT topic {topic}");
-                            continue;
-                        }
-                    };
-                    // let row = &df! {
-                    //     "Time" => vec![time],
-                    //     name => vec![value],
-                    // }?;
-                    // let id = Id::new(&*publish.topic);
-                    // let mut data_frame = context
-                    //     .memory(|memory| memory.data.get_temp::<DataFrame>(id))
-                    //     .unwrap_or_default();
-                    // data_frame = data_frame.vstack(&row)?;
-                    // context.memory_mut(|memory| {
-                    //     memory.data.insert_temp(id, data_frame);
-                    // });
-                }
-            }
-            Ok(())
-        })() {
-            error!(%error);
-        }
-    });
-}
-
-fn deserialize(dropped_file: &DroppedFile) -> Result<DataFrame> {
-    Ok(de::from_bytes(&dropped_file.bytes()?)?)
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub(crate) struct TemperatureMessage {
-    pub(crate) identifiers: Vec<u64>,
-    pub(crate) values: Vec<f32>,
-    pub(crate) date_time: DateTime<Local>,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-pub(crate) struct TurbidityMessage {
-    pub(crate) identifier: u64,
-    pub(crate) value: u16,
-    pub(crate) date_time: DateTime<Local>,
-}
-
 mod cloud;
 mod computers;
+mod mqtt;
 mod panes;

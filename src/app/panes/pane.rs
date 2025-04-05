@@ -1,18 +1,27 @@
 use super::{plot::Pane as PlotPane, settings::Settings, table::Pane as TablePane};
 use crate::app::{
-    MQTT_TOPIC_ATUC, MQTT_TOPIC_DDOC_C1, MQTT_TOPIC_DDOC_C2, MQTT_TOPIC_DDOC_T1,
-    MQTT_TOPIC_DDOC_T2, MQTT_TOPIC_DDOC_V1, MQTT_TOPIC_DDOC_V2, MQTT_TOPIC_DTEC, NAME_DDOC_C1,
-    NAME_DDOC_C2, NAME_DDOC_T1, NAME_DDOC_T2, NAME_DDOC_V1, NAME_DDOC_V2, NAME_TEMPERATURE,
-    NAME_TURBIDITY,
+    NAME_DDOC_C1, NAME_DDOC_C2, NAME_DDOC_T1, NAME_DDOC_T2, NAME_DDOC_V1, NAME_DDOC_V2,
+    NAME_TEMPERATURE, NAME_TURBIDITY,
+    mqtt::{
+        TOPIC_ATUC, TOPIC_DDOC_C1, TOPIC_DDOC_C2, TOPIC_DDOC_T1, TOPIC_DDOC_T2, TOPIC_DDOC_V1,
+        TOPIC_DDOC_V2, TOPIC_DTEC,
+    },
+    spawn,
 };
-use crate::localization::ContextExt as _;
-use anyhow::Result;
+use anyhow::{Error, Result};
 use egui::{Id, Ui, menu::bar};
-use egui_l20n::{ResponseExt, UiExt as _};
+use egui_l20n::ResponseExt;
 use egui_phosphor::regular::{CHART_LINE, CLOCK, CLOUD, TABLE};
+use object_store::{GetResult, ObjectStore, memory::InMemory, path::Path};
+use parquet::{
+    arrow::{ParquetRecordBatchStreamBuilder, async_reader::ParquetObjectReader},
+    file::reader::SerializedFileReader,
+    schema::printer::print_parquet_metadata,
+};
 use polars::prelude::*;
+use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
-use std::fmt::Write;
+use std::{fmt::Write, io::stdout};
 use time::OffsetDateTime;
 use tracing::error;
 
@@ -26,14 +35,14 @@ pub(crate) struct Pane {
 }
 
 impl Pane {
-    pub(crate) const ATEC: Self = Self::new(Kind::Dtec);
-    pub(crate) const DTUC: Self = Self::new(Kind::Atuc);
+    pub(crate) const ATUC: Self = Self::new(Kind::Atuc);
     pub(crate) const DDOC_C1: Self = Self::new(Kind::Ddoc(Ddoc::C1));
     pub(crate) const DDOC_C2: Self = Self::new(Kind::Ddoc(Ddoc::C2));
     pub(crate) const DDOC_T1: Self = Self::new(Kind::Ddoc(Ddoc::T1));
     pub(crate) const DDOC_T2: Self = Self::new(Kind::Ddoc(Ddoc::T2));
     pub(crate) const DDOC_V1: Self = Self::new(Kind::Ddoc(Ddoc::V1));
     pub(crate) const DDOC_V2: Self = Self::new(Kind::Ddoc(Ddoc::V2));
+    pub(crate) const DTEC: Self = Self::new(Kind::Dtec);
 }
 
 impl Pane {
@@ -96,7 +105,6 @@ impl Pane {
     pub(crate) fn text(&self) -> &'static str {
         match self.kind {
             Kind::Atuc => "analog_turbidity_controller.abbreviation",
-            Kind::Dtec => "digital_temperature_controller.abbreviation",
             Kind::Ddoc(Ddoc::C1) => {
                 "digital_disolved_oxygen_controller_concentration_channel?index=1"
             }
@@ -111,13 +119,13 @@ impl Pane {
             }
             Kind::Ddoc(Ddoc::V1) => "digital_disolved_oxygen_controller_voltage_channel?index=1",
             Kind::Ddoc(Ddoc::V2) => "digital_disolved_oxygen_controller_voltage_channel?index=2",
+            Kind::Dtec => "digital_temperature_controller.abbreviation",
         }
     }
 
     pub(crate) fn hover_text(&self) -> &'static str {
         match self.kind {
             Kind::Atuc => "analog_turbidity_controller.hover",
-            Kind::Dtec => "digital_temperature_controller.hover",
             Kind::Ddoc(Ddoc::C1) => {
                 "digital_disolved_oxygen_controller_concentration_channel?index=1"
             }
@@ -132,6 +140,7 @@ impl Pane {
             }
             Kind::Ddoc(Ddoc::V1) => "digital_disolved_oxygen_controller_voltage_channel?index=1",
             Kind::Ddoc(Ddoc::V2) => "digital_disolved_oxygen_controller_voltage_channel?index=2",
+            Kind::Dtec => "digital_temperature_controller.hover",
         }
     }
 }
@@ -140,11 +149,24 @@ impl Pane {
     // https://github.com/rerun-io/egui_tiles/blob/1be4183f7c76cc96cadd8b0367f84c48a8e1b4bd/src/container/tabs.rs#L57
     // https://github.com/emilk/egui/discussions/3468
     pub(crate) fn ui(&mut self, ui: &mut Ui) {
-        let Some(ref data_frame) = self
-            .data_frame
-            .clone()
-            .or_else(|| ui.data(|data| data.get_temp::<DataFrame>(Id::new(self.topic()?))))
-        else {
+        let Some(ref data_frame) = self.data_frame.clone().or_else(|| {
+            let topic = self.topic()?;
+            let store = ui.data(|data| data.get_temp::<Arc<InMemory>>(Id::new(topic)))?;
+            let path = Path::from(topic.to_owned());
+            tokio::spawn(async move {
+                let meta = store.head(&path).await?;
+                let reader = ParquetObjectReader::new(store, meta);
+                let builder = ParquetRecordBatchStreamBuilder::new(reader).await?;
+                builder.
+                print_parquet_metadata(&mut stdout(), builder.metadata());
+                // print!("bytes: {bytes:?}");
+                // let result = store.get(&path).await?;
+                // let bytes = result.bytes().await?;
+                Ok::<_, Error>(())
+            });
+            panic!("!!!");
+            // Some(())
+        }) else {
             ui.centered_and_justified(|ui| ui.spinner());
             return;
         };
@@ -173,9 +195,9 @@ impl Pane {
 /// Kind
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) enum Kind {
-    Dtec,
     Atuc,
     Ddoc(Ddoc),
+    Dtec,
 }
 
 /// Digital Disolved Oxygen Controller
@@ -192,14 +214,14 @@ pub(crate) enum Ddoc {
 impl Kind {
     pub(crate) const fn topic(&self) -> &str {
         match self {
-            Kind::Dtec => MQTT_TOPIC_DTEC,
-            Kind::Atuc => MQTT_TOPIC_ATUC,
-            Kind::Ddoc(Ddoc::C1) => MQTT_TOPIC_DDOC_C1,
-            Kind::Ddoc(Ddoc::C2) => MQTT_TOPIC_DDOC_C2,
-            Kind::Ddoc(Ddoc::T1) => MQTT_TOPIC_DDOC_T1,
-            Kind::Ddoc(Ddoc::T2) => MQTT_TOPIC_DDOC_T2,
-            Kind::Ddoc(Ddoc::V1) => MQTT_TOPIC_DDOC_V1,
-            Kind::Ddoc(Ddoc::V2) => MQTT_TOPIC_DDOC_V2,
+            Kind::Atuc => TOPIC_ATUC,
+            Kind::Ddoc(Ddoc::C1) => TOPIC_DDOC_C1,
+            Kind::Ddoc(Ddoc::C2) => TOPIC_DDOC_C2,
+            Kind::Ddoc(Ddoc::T1) => TOPIC_DDOC_T1,
+            Kind::Ddoc(Ddoc::T2) => TOPIC_DDOC_T2,
+            Kind::Ddoc(Ddoc::V1) => TOPIC_DDOC_V1,
+            Kind::Ddoc(Ddoc::V2) => TOPIC_DDOC_V2,
+            Kind::Dtec => TOPIC_DTEC,
         }
     }
 }
