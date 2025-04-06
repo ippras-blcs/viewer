@@ -21,9 +21,15 @@ use parquet::{
 use polars::prelude::*;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Write, io::stdout};
+use std::{
+    fmt::Write,
+    io::{Cursor, stdout},
+};
 use time::OffsetDateTime;
 use tracing::error;
+
+const TIMESTAMP: &str = "Timestamp";
+const FORMAT: &str = "%Y-%m-%d-%H-%M-%S";
 
 /// Pane
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -84,7 +90,7 @@ impl Pane {
         let mut title = format!("{} {}", self.icon(), self.name());
         if let Err(error) = (|| -> Result<_> {
             if let Some(data_frame) = &self.data_frame {
-                if let Some(date) = data_frame["Time"].datetime()?.to_string("%Y-%m-%d")?.get(0) {
+                if let Some(date) = data_frame[TIMESTAMP].datetime()?.to_string(FORMAT)?.get(0) {
                     write!(&mut title, " {date}")?;
                 }
             } else {
@@ -149,37 +155,37 @@ impl Pane {
     // https://github.com/rerun-io/egui_tiles/blob/1be4183f7c76cc96cadd8b0367f84c48a8e1b4bd/src/container/tabs.rs#L57
     // https://github.com/emilk/egui/discussions/3468
     pub(crate) fn ui(&mut self, ui: &mut Ui) {
-        let Some(ref data_frame) = self.data_frame.clone().or_else(|| {
-            let topic = self.topic()?;
-            let store = ui.data(|data| data.get_temp::<Arc<InMemory>>(Id::new(topic)))?;
-            let path = Path::from(topic.to_owned());
-            tokio::spawn(async move {
-                let meta = store.head(&path).await?;
-                let reader = ParquetObjectReader::new(store, meta);
-                let builder = ParquetRecordBatchStreamBuilder::new(reader).await?;
-                builder.
-                print_parquet_metadata(&mut stdout(), builder.metadata());
-                // print!("bytes: {bytes:?}");
-                // let result = store.get(&path).await?;
-                // let bytes = result.bytes().await?;
-                Ok::<_, Error>(())
-            });
-            panic!("!!!");
-            // Some(())
-        }) else {
-            ui.centered_and_justified(|ui| ui.spinner());
-            return;
-        };
-        match self.view {
-            View::Plot => ui.add(PlotPane {
-                data_frame,
-                settings: &mut self.settings,
-            }),
-            View::Table => ui.add(TablePane {
-                data_frame,
-                settings: &mut self.settings,
-            }),
-        };
+        // let Some(ref data_frame) = self.data_frame.clone().or_else(|| {
+        //     let topic = self.topic()?;
+        //     let store = ui.data(|data| data.get_temp::<Arc<InMemory>>(Id::new(topic)))?;
+        //     let path = Path::from(topic.to_owned());
+        //     tokio::spawn(async move {
+        //         let result = store.get(&path).await?;
+        //         let bytes = result.bytes().await?;
+        //         let mut reader = ParquetReader::new(Cursor::new(bytes));
+        //         let meta = reader.get_metadata()?;
+        //         let data = reader.finish()?;
+        //         print!("data: {data:?}");
+        //         Ok::<_, Error>(())
+        //     });
+        //     // panic!("!!!");
+        //     // Some(())
+        // }) else {
+        //     ui.centered_and_justified(|ui| ui.spinner());
+        //     return;
+        // };
+        ui.centered_and_justified(|ui| ui.spinner());
+        return;
+        // match self.view {
+        //     View::Plot => ui.add(PlotPane {
+        //         data_frame,
+        //         settings: &mut self.settings,
+        //     }),
+        //     View::Table => ui.add(TablePane {
+        //         data_frame,
+        //         settings: &mut self.settings,
+        //     }),
+        // };
     }
 
     pub(crate) fn settings(&mut self, ui: &mut Ui) {

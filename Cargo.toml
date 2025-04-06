@@ -23,7 +23,8 @@ egui_l20n = { git = "https://github.com/kgv/egui_l20n", features = ["macros"] }
 egui_plot = "0.31.0"
 egui_tiles = "0.12.0"
 futures = "0.3.31"
-object_store = { version = "0.11.0", features = ["http"] }
+metadata = { git = "https://github.com/ippras/metadata" }
+object_store = { version = "0.11.0", features = ["http", "serde"] }
 parquet = { version = "54.3.1", features = ["arrow", "async", "object_store"] }
 polars = { version = "0.46.0", default-features = false, features = [
     "dtype-array",      # ?
@@ -32,6 +33,7 @@ polars = { version = "0.46.0", default-features = false, features = [
     "dynamic_group_by",
     "fmt_no_tty",
     "lazy",
+    "parquet",
     "rolling_window",
     "round_series",
     "serde",

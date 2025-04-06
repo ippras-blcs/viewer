@@ -18,3 +18,6 @@ digital_temperature_controller = Digital temperature controller
     .hover = Digital temperature controller
 
 in_real_time = In real time
+loaded_files = Files
+    .hover = Loaded files
+delete_all = Delete all

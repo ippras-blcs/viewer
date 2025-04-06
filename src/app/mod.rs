@@ -1,18 +1,21 @@
-use self::panes::{
-    behavior::Behavior,
-    pane::{Ddoc, Pane},
+use self::{
+    cloud::GoogleDrive,
+    data::Data,
+    panes::{
+        behavior::Behavior,
+        pane::{Ddoc, Pane},
+    },
 };
 use crate::{
     localization::ContextExt as _,
     utils::{TilesExt, TreeExt},
 };
 use anyhow::{Error, Result};
-use cloud::GoogleDrive;
 use eframe::{APP_KEY, CreationContext, Storage, get_value, set_value};
 use egui::{
     Align, Align2, CentralPanel, Color32, ComboBox, DroppedFile, FontDefinitions, Id, LayerId,
-    Layout, Order, RichText, ScrollArea, SidePanel, Spinner, TextStyle, TopBottomPanel, Ui,
-    menu::bar, warn_if_debug_build,
+    Layout, Order, RichText, ScrollArea, SidePanel, Spinner, TextStyle, TextWrapMode,
+    TopBottomPanel, Ui, menu::bar, warn_if_debug_build,
 };
 use egui_ext::{DroppedFileExt, HoveredFileExt, LightDarkButton};
 use egui_l20n::{ResponseExt as _, UiExt};
@@ -25,18 +28,18 @@ use egui_phosphor::{
     },
 };
 use egui_tiles::{ContainerKind, Tile, Tree};
+use metadata::{MetaDataFrame, Metadata};
 use panes::pane::Kind;
 use polars::prelude::*;
-use ron::de;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Write,
     future::Future,
+    io::Cursor,
     str,
     sync::mpsc::{Receiver, Sender, channel},
-    time::Duration,
 };
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument};
 
 const NAME_DDOC_C1: &str = "DDOC.C1";
 const NAME_DDOC_C2: &str = "DDOC.C2";
@@ -62,6 +65,7 @@ pub struct App {
 
     tree: Tree<Pane>,
     behavior: Behavior,
+    data: Data,
 
     #[serde(skip)]
     google_drive: GoogleDrive,
@@ -84,6 +88,7 @@ impl Default for App {
             left_panel: true,
             tree: Tree::empty("tree"),
             behavior: Default::default(),
+            data: Default::default(),
             google_drive: GoogleDrive::new(data_sender, error_sender.clone()),
             data_receiver,
             error_sender,
@@ -140,37 +145,62 @@ impl App {
         }) {
             info!(?dropped_files);
             for dropped_file in dropped_files {
-                match deserialize(&dropped_file) {
-                    Ok(data_frame) if data_frame.width() > 1 => {
-                        trace!(?data_frame);
-                        let kind = match data_frame[1].name().as_str() {
-                            NAME_TEMPERATURE => Kind::Dtec,
-                            NAME_TURBIDITY => Kind::Atuc,
-                            NAME_DDOC_C1 => Kind::Ddoc(Ddoc::C1),
-                            NAME_DDOC_C2 => Kind::Ddoc(Ddoc::C2),
-                            NAME_DDOC_T1 => Kind::Ddoc(Ddoc::T1),
-                            NAME_DDOC_T2 => Kind::Ddoc(Ddoc::T2),
-                            NAME_DDOC_V1 => Kind::Ddoc(Ddoc::V1),
-                            NAME_DDOC_V2 => Kind::Ddoc(Ddoc::V2),
-                            _ => {
-                                error!("Unsupported format");
-                                continue;
-                            }
-                        };
-                        self.tree.insert_pane(Pane {
-                            kind,
-                            data_frame: Some(data_frame),
-                            settings: Default::default(),
-                            view: Default::default(),
-                        });
-                    }
-                    error => {
-                        if let Err(error) = error {
-                            error!(%error);
-                        }
-                        continue;
-                    }
-                };
+                if let Ok(data_frame) = deserialize(&dropped_file) {
+                    error!(?data_frame);
+                    self.data.add(data_frame);
+                    // trace!(?data_frame);
+                    // let kind = match data_frame[1].name().as_str() {
+                    //     NAME_TEMPERATURE => Kind::Dtec,
+                    //     NAME_TURBIDITY => Kind::Atuc,
+                    //     NAME_DDOC_C1 => Kind::Ddoc(Ddoc::C1),
+                    //     NAME_DDOC_C2 => Kind::Ddoc(Ddoc::C2),
+                    //     NAME_DDOC_T1 => Kind::Ddoc(Ddoc::T1),
+                    //     NAME_DDOC_T2 => Kind::Ddoc(Ddoc::T2),
+                    //     NAME_DDOC_V1 => Kind::Ddoc(Ddoc::V1),
+                    //     NAME_DDOC_V2 => Kind::Ddoc(Ddoc::V2),
+                    //     _ => {
+                    //         error!("Unsupported format");
+                    //         continue;
+                    //     }
+                    // };
+                    // self.tree.insert_pane(Pane {
+                    //     kind,
+                    //     data_frame: Some(data_frame),
+                    //     settings: Default::default(),
+                    //     view: Default::default(),
+                    // });
+                }
+                // match deserialize(&dropped_file) {
+                //     Ok(data_frame) if data_frame.width() > 1 => {
+                //         trace!(?data_frame);
+                //         let kind = match data_frame[1].name().as_str() {
+                //             NAME_TEMPERATURE => Kind::Dtec,
+                //             NAME_TURBIDITY => Kind::Atuc,
+                //             NAME_DDOC_C1 => Kind::Ddoc(Ddoc::C1),
+                //             NAME_DDOC_C2 => Kind::Ddoc(Ddoc::C2),
+                //             NAME_DDOC_T1 => Kind::Ddoc(Ddoc::T1),
+                //             NAME_DDOC_T2 => Kind::Ddoc(Ddoc::T2),
+                //             NAME_DDOC_V1 => Kind::Ddoc(Ddoc::V1),
+                //             NAME_DDOC_V2 => Kind::Ddoc(Ddoc::V2),
+                //             _ => {
+                //                 error!("Unsupported format");
+                //                 continue;
+                //             }
+                //         };
+                //         self.tree.insert_pane(Pane {
+                //             kind,
+                //             data_frame: Some(data_frame),
+                //             settings: Default::default(),
+                //             view: Default::default(),
+                //         });
+                //     }
+                //     error => {
+                //         if let Err(error) = error {
+                //             error!(%error);
+                //         }
+                //         continue;
+                //     }
+                // };
             }
         }
     }
@@ -241,13 +271,11 @@ impl App {
 
     // Left panel
     fn left_panel(&mut self, ctx: &egui::Context) {
-        SidePanel::left("left_panel")
-            .frame(egui::Frame::side_top_panel(&ctx.style()))
-            .resizable(true)
+        SidePanel::left("LeftPanel")
+            .resizable(false)
             .show_animated(ctx, self.left_panel, |ui| {
                 ScrollArea::vertical().show(ui, |ui| {
-                    self.behavior.settings(ui, &mut self.tree);
-                    ui.separator();
+                    self.data.show(ui);
                 });
             });
     }
@@ -401,8 +429,16 @@ impl eframe::App for App {
     }
 }
 
-fn deserialize(dropped_file: &DroppedFile) -> Result<DataFrame> {
-    Ok(de::from_bytes(&dropped_file.bytes()?)?)
+#[instrument(err)]
+fn deserialize(dropped_file: &DroppedFile) -> Result<MetaDataFrame> {
+    let bytes = dropped_file.bytes()?;
+    let mut reader = ParquetReader::new(Cursor::new(bytes));
+    let meta = reader.get_metadata()?;
+    println!("meta: {:#?}", meta.key_value_metadata);
+    let mut meta = Metadata::default();
+    meta.name = dropped_file.name().to_owned();
+    let data = reader.finish()?;
+    Ok(MetaDataFrame::new(meta, data))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -417,5 +453,6 @@ fn spawn<F: Future<Output = ()> + 'static>(f: F) {
 
 mod cloud;
 mod computers;
+mod data;
 mod mqtt;
 mod panes;
