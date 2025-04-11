@@ -1,10 +1,7 @@
 use self::{
     cloud::GoogleDrive,
     data::Data,
-    panes::{
-        behavior::Behavior,
-        pane::{Ddoc, Pane},
-    },
+    panes::{Ddoc, Pane, behavior::Behavior},
 };
 use crate::{
     localization::ContextExt as _,
@@ -29,7 +26,7 @@ use egui_phosphor::{
 };
 use egui_tiles::{ContainerKind, Tile, Tree};
 use metadata::{MetaDataFrame, Metadata};
-use panes::pane::Kind;
+use panes::Kind;
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -50,10 +47,11 @@ const NAME_DDOC_V2: &str = "DDOC.V2";
 const NAME_TEMPERATURE: &str = "Temperature";
 const NAME_TURBIDITY: &str = "Turbidity";
 
-const SIZE: f32 = 32.0;
+const MAX_PRECISION: usize = 16;
+const ICON_SIZE: f32 = 32.0;
 
 macro icon($icon:expr) {
-    RichText::new($icon).size(SIZE)
+    RichText::new($icon).size(ICON_SIZE)
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -64,7 +62,6 @@ pub struct App {
     reactive: bool,
 
     tree: Tree<Pane>,
-    behavior: Behavior,
     data: Data,
 
     #[serde(skip)]
@@ -87,7 +84,6 @@ impl Default for App {
             reactive: true,
             left_panel: true,
             tree: Tree::empty("tree"),
-            behavior: Default::default(),
             data: Default::default(),
             google_drive: GoogleDrive::new(data_sender, error_sender.clone()),
             data_receiver,
@@ -225,6 +221,7 @@ impl App {
                 kind,
                 data_frame: Some(data_frame),
                 settings: Default::default(),
+                state: Default::default(),
                 view: Default::default(),
             });
         }
@@ -262,8 +259,9 @@ impl App {
     // Central panel
     fn central_panel(&mut self, ctx: &egui::Context) {
         CentralPanel::default().show(ctx, |ui| {
-            self.tree.ui(&mut self.behavior, ui);
-            if let Some(id) = self.behavior.close.take() {
+            let mut behavior = Behavior::new();
+            self.tree.ui(&mut behavior, ui);
+            if let Some(id) = behavior.close.take() {
                 self.tree.tiles.remove(id);
             }
         });
@@ -272,10 +270,10 @@ impl App {
     // Left panel
     fn left_panel(&mut self, ctx: &egui::Context) {
         SidePanel::left("LeftPanel")
-            .resizable(false)
+            .resizable(true)
             .show_animated(ctx, self.left_panel, |ui| {
                 ScrollArea::vertical().show(ui, |ui| {
-                    self.data.show(ui);
+                    self.data.show(ui, &mut self.tree);
                 });
             });
     }
@@ -288,7 +286,7 @@ impl App {
                 ui.toggle_value(&mut self.left_panel, icon!(SIDEBAR_SIMPLE))
                     .on_hover_text(ui.localize("left_panel"));
                 ui.separator();
-                ui.light_dark_button(SIZE);
+                ui.light_dark_button(ICON_SIZE);
                 ui.separator();
                 ui.toggle_value(&mut self.reactive, icon!(ROCKET))
                     .on_hover_text("reactive")

@@ -10,6 +10,7 @@ use viewer::App;
 async fn main() -> eframe::Result<()> {
     // Log to stdout (if you run with `RUST_LOG=debug`).
     tracing_subscriber::fmt::init();
+    // console_subscriber::init();
 
     let native_options = Default::default();
     eframe::run_native(

@@ -1,4 +1,4 @@
-use crate::app::panes::settings::Settings;
+use crate::app::panes::settings::plot::Settings;
 use egui::{
     emath::OrderedFloat,
     util::cache::{ComputerMut, FrameCache},

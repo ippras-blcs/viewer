@@ -21,7 +21,9 @@ egui_ext = { git = "https://github.com/kgv/egui_ext" }
 egui_extras = "0.31.1"
 egui_l20n = { git = "https://github.com/kgv/egui_l20n", features = ["macros"] }
 egui_plot = "0.31.0"
+egui_table = "0.3.0"
 egui_tiles = "0.12.0"
+egui_tiles_ext = { git = "https://github.com/kgv/egui_tiles_ext" }
 futures = "0.3.31"
 metadata = { git = "https://github.com/ippras/metadata" }
 object_store = { version = "0.11.0", features = ["http", "serde"] }
@@ -38,6 +40,9 @@ polars = { version = "0.46.0", default-features = false, features = [
     "round_series",
     "serde",
     "temporal",
+] }
+polars-utils = { git = "https://github.com/pola-rs/polars", rev = "65848bc2ff4bda33809ed8be2517594df5b53d26", features = [
+    "nightly",
 ] }
 ron = "0.9.0"
 serde = { version = "1.0.219", features = ["derive"] }

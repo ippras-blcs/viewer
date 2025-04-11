@@ -1,4 +1,4 @@
-use super::settings::Settings;
+use super::settings::plot::Settings;
 use crate::app::computers::{PlotComputed, PlotKey};
 use egui::{Id, Response, Ui, Widget, emath::round_to_decimals};
 use egui_plot::{GridInput, GridMark, Legend, Line, Plot, PlotPoints, Points};

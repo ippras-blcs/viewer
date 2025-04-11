@@ -1,12 +1,18 @@
+use crate::app::panes::Pane;
 use egui::{Color32, Frame, Grid, Label, RichText, Sense, Stroke, TextWrapMode, Ui, menu::bar};
 use egui_extras::{Column, TableBuilder};
 use egui_l20n::{ResponseExt, UiExt as _};
 use egui_phosphor::regular::{CHECK, TRASH};
+use egui_tiles::Tree;
+use egui_tiles_ext::{TreeExt, VERTICAL};
 use metadata::{MetaDataFrame, egui::MetadataWidget};
-use object_store::{ObjectStore, PutPayload, memory::InMemory};
-use polars::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
+
+use super::{
+    ICON_SIZE,
+    panes::{Kind, View},
+};
 
 /// Data
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -29,26 +35,26 @@ impl Data {
 }
 
 impl Data {
-    pub(crate) fn show(&mut self, ui: &mut Ui) {
+    pub(crate) fn show(&mut self, ui: &mut Ui, tree: &mut Tree<Pane>) {
         // Header
         bar(ui, |ui| {
             ui.heading(ui.localize("loaded_files"))
                 .on_hover_localized("loaded_files.hover");
             ui.separator();
             // Toggle all
-            // if ui
-            //     .button(RichText::new(CHECK).heading())
-            //     .on_hover_localized("toggle_all")
-            //     .on_hover_localized("toggle_all.hover")
-            //     .clicked()
-            // {
-            //     if self.selected.is_empty() {
-            //         self.selected = self.frames.iter().cloned().collect();
-            //     } else {
-            //         self.selected.clear();
-            //     }
-            // }
-            // ui.separator();
+            if ui
+                .button(RichText::new(CHECK).heading())
+                .on_hover_localized("toggle_all")
+                .on_hover_localized("toggle_all.hover")
+                .clicked()
+            {
+                if self.selected.is_empty() {
+                    self.selected = self.frames.iter().cloned().collect();
+                } else {
+                    self.selected.clear();
+                }
+            }
+            ui.separator();
             // Delete all
             if ui
                 .button(RichText::new(TRASH).heading())
@@ -56,6 +62,25 @@ impl Data {
                 .clicked()
             {
                 *self = Default::default();
+            }
+            ui.separator();
+            if ui
+                .button(RichText::new("Pane::icon").heading())
+                .on_hover_localized("show")
+                .clicked()
+            {
+                let frames = self.selected();
+                for frame in frames {
+                    let pane = Pane {
+                        kind: Kind::Dtec,
+                        data_frame: Some(frame.data),
+                        settings: Default::default(),
+                        state: Default::default(),
+                        view: View::Table,
+                    };
+                    tree.insert_pane::<VERTICAL>(pane);
+                    println!("self.tree: {:?}", tree);
+                }
             }
             ui.separator();
         });

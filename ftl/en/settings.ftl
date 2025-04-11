@@ -21,3 +21,14 @@ in_real_time = In real time
 loaded_files = Files
     .hover = Loaded files
 delete_all = Delete all
+
+index = Index
+identifier = Identifier
+value = Value
+timestamp = Timestamp
+
+precision = Precision
+properties = Properties
+sticky_columns = Sticky columns
+filter = Filter
+filter-by-identifier = Filter by identifier
